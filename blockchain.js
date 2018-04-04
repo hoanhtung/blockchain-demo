@@ -1,22 +1,33 @@
-const cluster = require('cluster')
-const dgram = require('dgram')
-const express = require('express')
+const cluster = require('cluster');
+const dgram = require('dgram');
+const express = require('express');
+const cryptoJS = require("crypto-js");
+const parser = require('body-parser');
+const request = require('request');
+const transaction = {
+  "Form": "Tung",
+  "To": "Dung",
+  "Amount": 200
+};
 
 
 class Block {
-  constructor(index, previousHash, timestamp, data, nonce) {
-    this.index = index
-    this.previousHash = previousHash
-    this.timestamp = timestamp
-    this.nonce = nonce
-    this.hash = null
+  constructor(index, previousHash, timestamp, data, nonce, hash) {
+    this.index = index;
+    this.previousHash = previousHash;
+    this.timestamp = timestamp;
+    this.data = data;
+    this.nonce = nonce;
+    this.hash = hash.toString();
   }
 }
-
+var getFirstBlock = () => {
+  return new Block(0, "0", 1465154705 , 0, "72117e16e680307de8441247d0ebe9cd792852a4ee9fdc3aac293f120285d7cc");
+};
 
 class Server {
   constructor() {
-    this.blocks = []
+    this.blocks = [getFirstBlock()];
     this.peers = {}
 
     // Peer discovery server
@@ -27,9 +38,63 @@ class Server {
     // RPC server
     this.httpServer = express()
     // TODO: API to show know peers
-    this.httpServer.get('/peers', this.showPeers.bind(this))
+    this.httpServer.get('/peers', this.showPeers.bind(this));
     // TODO: API to show current blocks
-    this.httpServer.get('/blocks', this.showBlocks.bind(this))
+    this.httpServer.get('/blocks', this.showBlocks.bind(this));
+    //API to create transaction
+    this.httpServer.post('/transaction', this.handleTransaction.bind(this));
+     //API to show last block
+     this.httpServer.post('/lastBlock', this.showLastBlock.bind(this));
+  }
+  showLastBlock(req, res) {
+    res.json(this.blocks[this.blocks.length - 1]);
+  }
+  handleTransaction(req, res) {
+    var txData = transaction;
+  }
+  getLastBlock() {
+    return this.blocks[this.blocks.length - 1];
+  }
+  createBlock(blockData) {
+    var lastBlock = this.getLastBlock();
+    var newIndex = lastBlock.index + 1;
+    var newTimestamp = Data.now();
+    var newBlock = this.mineNewBlock(lastBlock, newIndex, newTimestamp, blockData);
+    if (this.validateBlock(newBlock, lastBlock)) {
+      this.blocks.push(newBlock);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  mineNewBlock(lastBlock, newIndex, newTimestamp, blockData) {
+    var nonce = 0;
+    var newHash = '';
+    while (true) {
+      newHash = this.calculateHash(newIndex, latestBlock.hash, newTimestamp, blockData, nonce);
+      if (newHash.substring(0, 2) !== '00') {
+        nonce += 1;
+      } else {
+        return new Block(newIndex, latestBlock.hash, newTimestamp, blockData, newHash, nonce);
+      }
+    }
+  }
+
+  calculateHash(index, previousHash, timestamp, data, nonce) {
+    return cryptoJS.SHA256(index + previousHash + timestamp + data + nonce).toString();
+  }
+
+  validateBlock(newBlock, lastBlock) {
+    if (newBlock.index !== lastBlock.index + 1) {
+      return false;
+    } else if (newBlock.previousHash !== lastBlock.hash) {
+      return false;
+    } else if (this.calculateHash(newBlock.index, newBlock.previousHash, newBlock.timestamp, newBlock.data, newBlock.nonce) !== newBlock.hash) {
+      return false;
+    } else {
+      return true; 
+    }
   }
 
   showPeers(req, res) {
@@ -78,12 +143,10 @@ class Server {
     const reply = Buffer.from('hello')
     // TODO: Reply to the peer with the same 'hello' message
     this.peerServer.send(reply, remote.port, remote.address);
-
   }
 
   }
 }
-
 
 exports.Block = Block
 exports.Server = Server
