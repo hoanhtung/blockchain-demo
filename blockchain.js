@@ -14,7 +14,7 @@ const transaction = {
 class Block {
   constructor(index, previousHash, timestamp, data, nonce, hash) {
     this.index = index;
-    this.previousHash = previousHash;
+    this.previousHash = previousHash.toString();
     this.timestamp = timestamp;
     this.data = data;
     this.nonce = nonce;
@@ -22,7 +22,7 @@ class Block {
   }
 }
 var getFirstBlock = () => {
-  return new Block(0, "0", 1465154705 , 0, "72117e16e680307de8441247d0ebe9cd792852a4ee9fdc3aac293f120285d7cc");
+  return new Block(0, "0", new Date() , '', 0, "72117e16e680307de8441247d0ebe9cd792852a4ee9fdc3aac293f120285d7cc");
 };
 
 class Server {
@@ -43,14 +43,24 @@ class Server {
     this.httpServer.get('/blocks', this.showBlocks.bind(this));
     //API to create transaction
     this.httpServer.post('/transaction', this.handleTransaction.bind(this));
-     //API to show last block
-     this.httpServer.post('/lastBlock', this.showLastBlock.bind(this));
+    //API to show last block
+    this.httpServer.post('/lastBlock', this.showLastBlock.bind(this));
+    //API to show all block
+    this.httpServer.post('/showAllBlock', this.showAllBlock.bind(this));
+  }
+  showAllBlock(req, res) {
+    res.json(this.blocks);
   }
   showLastBlock(req, res) {
     res.json(this.blocks[this.blocks.length - 1]);
   }
   handleTransaction(req, res) {
     var txData = transaction;
+    var newBlock = this.createBlock(txData);
+    this.peerServer.setBroadcast(true);
+    this.peerServer.send(Buffer.from(JSON.stringify({ message: "New Block", block: newBlock })),
+      this.peerServer.address().port, '192.168.0.0', (err) => { })
+    res.send('Mined successfully! Waiting for confirmed!')
   }
   getLastBlock() {
     return this.blocks[this.blocks.length - 1];
@@ -58,7 +68,7 @@ class Server {
   createBlock(blockData) {
     var lastBlock = this.getLastBlock();
     var newIndex = lastBlock.index + 1;
-    var newTimestamp = Data.now();
+    var newTimestamp = Date.now();
     var newBlock = this.mineNewBlock(lastBlock, newIndex, newTimestamp, blockData);
     if (this.validateBlock(newBlock, lastBlock)) {
       this.blocks.push(newBlock);
@@ -72,11 +82,11 @@ class Server {
     var nonce = 0;
     var newHash = '';
     while (true) {
-      newHash = this.calculateHash(newIndex, latestBlock.hash, newTimestamp, blockData, nonce);
+      newHash = this.calculateHash(newIndex, lastBlock.hash, newTimestamp, blockData, nonce);
       if (newHash.substring(0, 2) !== '00') {
         nonce += 1;
       } else {
-        return new Block(newIndex, latestBlock.hash, newTimestamp, blockData, newHash, nonce);
+        return new Block(newIndex, lastBlock.hash, newTimestamp, blockData, nonce, newHash);
       }
     }
   }
@@ -87,14 +97,17 @@ class Server {
 
   validateBlock(newBlock, lastBlock) {
     if (newBlock.index !== lastBlock.index + 1) {
+      console.log(newBlock);
+      console.log('Error index!');
       return false;
     } else if (newBlock.previousHash !== lastBlock.hash) {
+      console.log('Error previous hash!');
       return false;
     } else if (this.calculateHash(newBlock.index, newBlock.previousHash, newBlock.timestamp, newBlock.data, newBlock.nonce) !== newBlock.hash) {
+      console.log('Error new hash!');
       return false;
-    } else {
-      return true; 
-    }
+    } 
+    return true;
   }
 
   showPeers(req, res) {
@@ -127,7 +140,7 @@ class Server {
     const message = Buffer.from('hello')
     // TODO: broadcast 'hello' message to subnet '172.28.0.0'
     this.peerServer.setBroadcast(true);
-    this.peerServer.send(message, 2346 , '172.28.0.0');
+    this.peerServer.send(message, address.port , '172.28.0.0', (err) => {});
 
 
   }
@@ -143,10 +156,19 @@ class Server {
     const reply = Buffer.from('hello')
     // TODO: Reply to the peer with the same 'hello' message
     this.peerServer.send(reply, remote.port, remote.address);
-  }
-
+    }
+    if (message.toString().includes('New Block')) {
+      var newBlock = JSON.parse(message.toString()).block;
+      var lastBlock = this.blocks[this.blocks.length - 1];
+      if (this.validateBlock(newBlock, lastBlock)) {
+        this.blocks.push(newBlock);
+        console.log('Block ' + newBlock.index + ' is confirmed!');
+      } else {
+        console.log('Block ' + newBlock.index + ' is not confirmed!');
+      }
+    }
   }
 }
 
-exports.Block = Block
-exports.Server = Server
+exports.Block = Block;
+exports.Server = Server;
